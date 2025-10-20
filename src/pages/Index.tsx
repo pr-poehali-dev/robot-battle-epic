@@ -25,6 +25,8 @@ interface Mission {
   reward: number;
   completed: boolean;
   boss?: boolean;
+  enemyImage: string;
+  enemyName: string;
 }
 
 export default function Index() {
@@ -41,6 +43,10 @@ export default function Index() {
   const [isPlayerTurn, setIsPlayerTurn] = useState(true);
   const [damageIndicator, setDamageIndicator] = useState<{amount: number, type: 'player' | 'enemy'} | null>(null);
   const [shake, setShake] = useState<'player' | 'enemy' | null>(null);
+  const [attackAnimation, setAttackAnimation] = useState<'player' | 'enemy' | null>(null);
+  const [specialReady, setSpecialReady] = useState(true);
+  const [comboCount, setComboCount] = useState(0);
+  const [shieldActive, setShieldActive] = useState(false);
 
   const robots: Robot[] = [
     {
@@ -79,12 +85,12 @@ export default function Index() {
   ];
 
   const missions: Mission[] = [
-    { id: 1, name: 'Патруль сектора А-7', difficulty: 'easy', reward: 500, completed: false },
-    { id: 2, name: 'Защита конвоя', difficulty: 'medium', reward: 800, completed: false },
-    { id: 3, name: 'Зачистка базы врага', difficulty: 'hard', reward: 1200, completed: false },
-    { id: 4, name: 'БОСС: Гидра Прайм', difficulty: 'boss', reward: 3000, completed: false, boss: true },
-    { id: 5, name: 'Диверсия на заводе', difficulty: 'medium', reward: 900, completed: false },
-    { id: 6, name: 'БОСС: Колосс Разрушения', difficulty: 'boss', reward: 5000, completed: false, boss: true }
+    { id: 1, name: 'Патруль сектора А-7', difficulty: 'easy', reward: 500, completed: false, enemyImage: 'https://cdn.poehali.dev/projects/c3045d3a-33e5-42fa-829f-707b67371ce0/files/76eaa5c1-676f-4708-ad58-6163ff2668f0.jpg', enemyName: 'Разведчик МК-1' },
+    { id: 2, name: 'Защита конвоя', difficulty: 'medium', reward: 800, completed: false, enemyImage: 'https://cdn.poehali.dev/projects/c3045d3a-33e5-42fa-829f-707b67371ce0/files/76eaa5c1-676f-4708-ad58-6163ff2668f0.jpg', enemyName: 'Патрульный дрон' },
+    { id: 3, name: 'Зачистка базы врага', difficulty: 'hard', reward: 1200, completed: false, enemyImage: 'https://cdn.poehali.dev/projects/c3045d3a-33e5-42fa-829f-707b67371ce0/files/967d23b6-b918-49e4-b3f0-2e252e1174bc.jpg', enemyName: 'Штурмовой танк' },
+    { id: 4, name: 'БОСС: Гидра Прайм', difficulty: 'boss', reward: 3000, completed: false, boss: true, enemyImage: 'https://cdn.poehali.dev/projects/c3045d3a-33e5-42fa-829f-707b67371ce0/files/d1a72049-1469-4705-ae2c-3cbfe1808fa7.jpg', enemyName: '👑 Гидра Прайм' },
+    { id: 5, name: 'Диверсия на заводе', difficulty: 'medium', reward: 900, completed: false, enemyImage: 'https://cdn.poehali.dev/projects/c3045d3a-33e5-42fa-829f-707b67371ce0/files/f4ea8191-510b-4bdd-bed3-bf8783301efb.jpg', enemyName: 'Элитный охранник' },
+    { id: 6, name: 'БОСС: Колосс Разрушения', difficulty: 'boss', reward: 5000, completed: false, boss: true, enemyImage: 'https://cdn.poehali.dev/projects/c3045d3a-33e5-42fa-829f-707b67371ce0/files/37a82f80-0a72-402d-93f9-9c9357246e55.jpg', enemyName: '👑 Колосс Разрушения' }
   ];
 
   const upgrades = [
@@ -99,13 +105,16 @@ export default function Index() {
     setInBattle(true);
     const robot = robots[selectedRobot];
     
-    const enemyMaxHp = mission.boss ? 2000 : mission.difficulty === 'hard' ? 1500 : mission.difficulty === 'medium' ? 1000 : 700;
+    const enemyMaxHp = mission.boss ? 2500 : mission.difficulty === 'hard' ? 1500 : mission.difficulty === 'medium' ? 1000 : 700;
     setPlayerHealth(robot.health);
     setPlayerMaxHealth(robot.maxHealth);
     setEnemyHealth(enemyMaxHp);
     setEnemyMaxHealth(enemyMaxHp);
     setIsPlayerTurn(true);
-    setBattleLog([`⚔️ Бой начался! ${robot.name} против ${mission.name}`]);
+    setComboCount(0);
+    setSpecialReady(true);
+    setShieldActive(false);
+    setBattleLog([`⚔️ ${robot.name} VS ${mission.enemyName}`, `🎮 Используй спецатаку для мощного урона!`]);
   };
 
   const performAttack = () => {
@@ -113,55 +122,130 @@ export default function Index() {
     
     const robot = robots[selectedRobot];
     const isCrit = Math.random() > 0.7;
-    const damage = isCrit ? Math.floor(robot.attack * 1.5) : robot.attack;
+    let damage = isCrit ? Math.floor(robot.attack * 1.5) : robot.attack;
+    
+    if (comboCount > 0) {
+      damage = Math.floor(damage * (1 + comboCount * 0.2));
+    }
+    
     const newEnemyHealth = Math.max(0, enemyHealth - damage);
     
-    setEnemyHealth(newEnemyHealth);
-    setShake('enemy');
-    setDamageIndicator({amount: damage, type: 'enemy'});
-    setBattleLog(prev => [...prev, `💥 ${robot.name} наносит ${damage} урона! ${isCrit ? '⚡ КРИТ!' : ''}`]);
+    setAttackAnimation('player');
+    setTimeout(() => {
+      setEnemyHealth(newEnemyHealth);
+      setShake('enemy');
+      setDamageIndicator({amount: damage, type: 'enemy'});
+      
+      if (isCrit) {
+        setComboCount(prev => Math.min(prev + 1, 3));
+        setBattleLog(prev => [...prev, `⚡ КРИТИЧЕСКИЙ УДАР! ${damage} урона! КОМБО x${comboCount + 1}`]);
+      } else {
+        setComboCount(0);
+        setBattleLog(prev => [...prev, `💥 ${robot.name} атакует: ${damage} урона`]);
+      }
+    }, 300);
     
     setTimeout(() => {
       setShake(null);
       setDamageIndicator(null);
-    }, 500);
+      setAttackAnimation(null);
+    }, 800);
     
     if (newEnemyHealth <= 0) {
       setTimeout(() => {
-        setBattleLog(prev => [...prev, `🎉 Победа! Получено ${currentMission.reward} кредитов`]);
+        setBattleLog(prev => [...prev, `🏆 ПОБЕДА! +${currentMission.reward} кредитов`]);
         setCredits(prev => prev + currentMission.reward);
-        setTimeout(() => setInBattle(false), 2000);
-      }, 1000);
+        setTimeout(() => setInBattle(false), 3000);
+      }, 1200);
       return;
     }
     
     setIsPlayerTurn(false);
-    setTimeout(() => enemyAttack(), 1500);
+    setTimeout(() => enemyAttack(), 2000);
   };
   
-  const enemyAttack = () => {
-    const enemyDamage = Math.floor(Math.random() * 60) + 40;
-    const newPlayerHealth = Math.max(0, playerHealth - enemyDamage);
+  const performSpecialAttack = () => {
+    if (!specialReady || !isPlayerTurn || !currentMission) return;
     
-    setPlayerHealth(newPlayerHealth);
-    setShake('player');
-    setDamageIndicator({amount: enemyDamage, type: 'player'});
-    setBattleLog(prev => [...prev, `🔥 Враг контратакует на ${enemyDamage} урона!`]);
+    const robot = robots[selectedRobot];
+    const specialDamage = Math.floor(robot.attack * 2.5);
+    const newEnemyHealth = Math.max(0, enemyHealth - specialDamage);
+    
+    setSpecialReady(false);
+    setAttackAnimation('player');
+    
+    setTimeout(() => {
+      setEnemyHealth(newEnemyHealth);
+      setShake('enemy');
+      setDamageIndicator({amount: specialDamage, type: 'enemy'});
+      setBattleLog(prev => [...prev, `🌟 СПЕЦАТАКА! ${specialDamage} урона! Враг оглушен!`]);
+      setComboCount(3);
+    }, 400);
     
     setTimeout(() => {
       setShake(null);
       setDamageIndicator(null);
-    }, 500);
+      setAttackAnimation(null);
+    }, 1000);
     
-    if (newPlayerHealth <= 0) {
+    if (newEnemyHealth <= 0) {
       setTimeout(() => {
-        setBattleLog(prev => [...prev, `💀 Поражение... Попробуй снова!`]);
-        setTimeout(() => setInBattle(false), 2000);
-      }, 1000);
+        setBattleLog(prev => [...prev, `🏆 ЭПИЧНАЯ ПОБЕДА! +${currentMission.reward} кредитов`]);
+        setCredits(prev => prev + currentMission.reward);
+        setTimeout(() => setInBattle(false), 3000);
+      }, 1500);
       return;
     }
     
-    setIsPlayerTurn(true);
+    setIsPlayerTurn(false);
+    setTimeout(() => enemyAttack(), 2500);
+  };
+  
+  const activateShield = () => {
+    if (shieldActive || !isPlayerTurn) return;
+    setShieldActive(true);
+    setBattleLog(prev => [...prev, `🛡️ Щит активирован! Следующая атака заблокирована!`]);
+    setIsPlayerTurn(false);
+    setTimeout(() => enemyAttack(), 1500);
+  };
+
+  const enemyAttack = () => {
+    let enemyDamage = Math.floor(Math.random() * 80) + 50;
+    
+    if (currentMission?.boss) {
+      enemyDamage = Math.floor(enemyDamage * 1.3);
+    }
+    
+    setAttackAnimation('enemy');
+    
+    setTimeout(() => {
+      if (shieldActive) {
+        setBattleLog(prev => [...prev, `🛡️ ЩИТ ЗАБЛОКИРОВАЛ ${enemyDamage} урона!`]);
+        setShieldActive(false);
+        setDamageIndicator({amount: 0, type: 'player'});
+      } else {
+        const newPlayerHealth = Math.max(0, playerHealth - enemyDamage);
+        setPlayerHealth(newPlayerHealth);
+        setShake('player');
+        setDamageIndicator({amount: enemyDamage, type: 'player'});
+        setBattleLog(prev => [...prev, `🔥 ${currentMission?.enemyName} атакует: ${enemyDamage} урона!`]);
+        
+        if (newPlayerHealth <= 0) {
+          setTimeout(() => {
+            setBattleLog(prev => [...prev, `💀 ПОРАЖЕНИЕ... Попробуй снова!`]);
+            setTimeout(() => setInBattle(false), 2500);
+          }, 1000);
+          return;
+        }
+      }
+    }, 400);
+    
+    setTimeout(() => {
+      setShake(null);
+      setDamageIndicator(null);
+      setAttackAnimation(null);
+      setIsPlayerTurn(true);
+    }, 1000);
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -328,77 +412,111 @@ export default function Index() {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    <Card className="metal-texture p-8">
-                      <div className="grid md:grid-cols-2 gap-8 mb-6">
-                        <div className={`relative transition-all duration-300 ${shake === 'player' ? 'animate-[shake_0.5s_ease-in-out]' : ''}`}>
+                    <Card className="metal-texture p-8 relative overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-destructive/5 animate-pulse-glow pointer-events-none"></div>
+                      
+                      {comboCount > 0 && (
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                          <Badge className="text-2xl px-6 py-2 bg-yellow-500 text-black animate-pulse-glow">
+                            🔥 КОМБО x{comboCount}
+                          </Badge>
+                        </div>
+                      )}
+                      
+                      <div className="grid md:grid-cols-2 gap-8 mb-6 relative z-10">
+                        <div className={`relative transition-all duration-300 ${shake === 'player' ? 'animate-shake' : ''} ${attackAnimation === 'player' ? 'scale-110 -translate-x-8' : ''}`}>
                           <div className="text-center mb-4">
                             <h3 className="text-2xl font-bold text-primary mb-2">{robots[selectedRobot].name}</h3>
-                            <Badge className="mb-2">ВАШ РОБОТ</Badge>
+                            <Badge className="mb-2 bg-primary">ВАШ РОБОТ</Badge>
                           </div>
                           <div className="relative">
+                            {shieldActive && (
+                              <div className="absolute inset-0 border-4 border-blue-400 rounded-lg animate-pulse-glow bg-blue-500/20 z-10"></div>
+                            )}
                             <img 
                               src={robots[selectedRobot].image} 
                               alt={robots[selectedRobot].name}
-                              className="w-full h-72 object-cover rounded-lg border-4 border-primary glow-blue"
+                              className={`w-full h-72 object-cover rounded-lg border-4 border-primary glow-blue transition-all ${attackAnimation === 'player' ? 'brightness-150' : ''}`}
                             />
-                            {damageIndicator && damageIndicator.type === 'player' && (
-                              <div className="absolute top-4 right-4 text-4xl font-black text-red-500 animate-[bounce_0.5s_ease-out] drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">
+                            {damageIndicator && damageIndicator.type === 'player' && damageIndicator.amount > 0 && (
+                              <div className="absolute top-4 right-4 text-5xl font-black text-red-500 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,1)]">
                                 -{damageIndicator.amount}
                               </div>
                             )}
                           </div>
                           <div className="mt-4 space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span>HP</span>
-                              <span className="font-bold">{playerHealth}/{playerMaxHealth}</span>
+                            <div className="flex justify-between text-sm font-bold">
+                              <span className="text-primary">HP</span>
+                              <span className={playerHealth < playerMaxHealth * 0.3 ? 'text-red-500 animate-pulse' : ''}>{playerHealth}/{playerMaxHealth}</span>
                             </div>
-                            <Progress value={(playerHealth / playerMaxHealth) * 100} className="h-3" />
+                            <Progress value={(playerHealth / playerMaxHealth) * 100} className="h-4 glow-blue" />
                           </div>
                         </div>
 
-                        <div className={`relative transition-all duration-300 ${shake === 'enemy' ? 'animate-[shake_0.5s_ease-in-out]' : ''}`}>
+                        <div className={`relative transition-all duration-300 ${shake === 'enemy' ? 'animate-shake' : ''} ${attackAnimation === 'enemy' ? 'scale-110 translate-x-8' : ''}`}>
                           <div className="text-center mb-4">
-                            <h3 className="text-2xl font-bold text-destructive mb-2">ВРАГ</h3>
+                            <h3 className="text-2xl font-bold text-destructive mb-2">{currentMission?.enemyName}</h3>
                             <Badge className="mb-2 bg-destructive">
                               {currentMission?.boss ? '👑 БОСС' : 'ПРОТИВНИК'}
                             </Badge>
                           </div>
                           <div className="relative">
                             <img 
-                              src="https://cdn.poehali.dev/projects/c3045d3a-33e5-42fa-829f-707b67371ce0/files/28f18d64-bbe2-44f1-a9ec-948c7ddd0301.jpg"
+                              src={currentMission?.enemyImage}
                               alt="Enemy"
-                              className="w-full h-72 object-cover rounded-lg border-4 border-destructive glow-red"
+                              className={`w-full h-72 object-cover rounded-lg border-4 border-destructive glow-red transition-all ${attackAnimation === 'enemy' ? 'brightness-150' : ''}`}
                             />
                             {damageIndicator && damageIndicator.type === 'enemy' && (
-                              <div className="absolute top-4 right-4 text-4xl font-black text-yellow-500 animate-[bounce_0.5s_ease-out] drop-shadow-[0_0_10px_rgba(234,179,8,0.8)]">
+                              <div className="absolute top-4 right-4 text-5xl font-black text-yellow-500 animate-bounce drop-shadow-[0_0_20px_rgba(234,179,8,1)]">
                                 -{damageIndicator.amount}
                               </div>
                             )}
                           </div>
                           <div className="mt-4 space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span>HP</span>
-                              <span className="font-bold">{enemyHealth}/{enemyMaxHealth}</span>
+                            <div className="flex justify-between text-sm font-bold">
+                              <span className="text-destructive">HP</span>
+                              <span className={enemyHealth < enemyMaxHealth * 0.3 ? 'text-red-500 animate-pulse' : ''}>{enemyHealth}/{enemyMaxHealth}</span>
                             </div>
-                            <Progress value={(enemyHealth / enemyMaxHealth) * 100} className="h-3" />
+                            <Progress value={(enemyHealth / enemyMaxHealth) * 100} className="h-4 glow-red" />
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex gap-4 justify-center mb-6">
+                      <div className="flex gap-3 justify-center mb-6 flex-wrap relative z-10">
                         <Button 
                           size="lg" 
-                          className="w-48 h-14 text-xl glow-blue"
+                          className="h-16 text-lg glow-blue flex-1 min-w-[140px]"
                           onClick={performAttack}
                           disabled={!isPlayerTurn || enemyHealth <= 0 || playerHealth <= 0}
                         >
                           <Icon name="Sword" className="mr-2" size={24} />
-                          {isPlayerTurn ? 'АТАКА!' : 'Ход врага...'}
+                          {isPlayerTurn ? 'АТАКА' : 'Ход врага...'}
                         </Button>
+                        
+                        <Button 
+                          size="lg" 
+                          className="h-16 text-lg bg-yellow-500 hover:bg-yellow-600 glow-orange flex-1 min-w-[140px]"
+                          onClick={performSpecialAttack}
+                          disabled={!specialReady || !isPlayerTurn || enemyHealth <= 0 || playerHealth <= 0}
+                        >
+                          <Icon name="Zap" className="mr-2" size={24} />
+                          {specialReady ? 'СПЕЦАТАКА' : 'Использована'}
+                        </Button>
+                        
+                        <Button 
+                          size="lg" 
+                          className="h-16 text-lg bg-blue-500 hover:bg-blue-600 flex-1 min-w-[140px]"
+                          onClick={activateShield}
+                          disabled={!isPlayerTurn || shieldActive || enemyHealth <= 0 || playerHealth <= 0}
+                        >
+                          <Icon name="Shield" className="mr-2" size={24} />
+                          {shieldActive ? 'ЩИТ АКТИВЕН' : 'ЩИТ'}
+                        </Button>
+                        
                         <Button 
                           size="lg" 
                           variant="outline"
-                          className="w-48 h-14 text-xl"
+                          className="h-16 text-lg"
                           onClick={() => setInBattle(false)}
                           disabled={enemyHealth > 0 && playerHealth > 0}
                         >
@@ -409,10 +527,13 @@ export default function Index() {
                     </Card>
 
                     <Card className="metal-texture p-6">
-                      <h4 className="text-xl font-bold mb-4 text-center">📜 БОЙ-ЛОГ</h4>
-                      <div className="space-y-2 bg-background/50 p-4 rounded-lg max-h-48 overflow-y-auto">
+                      <h4 className="text-xl font-bold mb-4 text-center flex items-center justify-center gap-2">
+                        <Icon name="ScrollText" size={24} />
+                        БОЙ-ЛОГ
+                      </h4>
+                      <div className="space-y-1 bg-background/50 p-4 rounded-lg max-h-48 overflow-y-auto">
                         {battleLog.map((log, idx) => (
-                          <div key={idx} className="text-sm animate-slide-in opacity-80">
+                          <div key={idx} className="text-sm animate-slide-in opacity-90 font-mono">
                             {log}
                           </div>
                         ))}
